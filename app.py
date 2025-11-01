@@ -7,23 +7,26 @@ from flask import Flask, request, jsonify
 from pyrogram import Client
 from pyrogram.errors import FloodWait
 
+# === Configuration ===
 API_ID = int(os.getenv("API_ID", "29969433"))
 API_HASH = os.getenv("API_HASH", "884f9ffa4e8ece099cccccade82effac")
-PHONE_NUMBER = os.getenv("PHONE_NUMBER", "+919214045762")
+SESSION_STRING = os.getenv("SESSION_STRING", "BQHJTBkAsUpm_azwJqDz2tu9oHOE4zXtXxsktHKFLYytvW8zE9cTOTJHcNoFW0LN34sIF_t5hkZxQyiGwvpQdKBZ3jC7e6jsoikhY4uGzGlWxqArJ3yHeprIpivtsKUR_6KSd2Zk4HmRAbWd5PkNBsaOtAcV7NClY0jk5B7vdL-uY0X0WdUkhOH8mT5oznk91yvCRl-oicFiyTrTks8mLm7lbHoGtPSBHt450awdlNQz-_-qs3y2mG_Qk1Qx5xY1WLWyPvSgONQxbRCiUEZC6EwfJan_4pMWYJqEvwSnE3NHc1Dxlox0x9mBRx602NPu-7sFGmiCm0IgaIKBmdEHzFltIKXdjwAAAAHrPloTAA")
 TARGET_BOT = os.getenv("TARGET_BOT", "@telebrecheddb_bot")
 
+# === Flask setup ===
 app = Flask(__name__)
 
-# --- Telegram client ---
+# === Telegram Client ===
 tg_client = Client(
-    "session",
+    name="session",
     api_id=API_ID,
     api_hash=API_HASH,
-    phone_number=PHONE_NUMBER,
+    session_string=SESSION_STRING,
     no_updates=True
 )
 
-tg_loop = None  # Global loop
+tg_loop = None
+tg_ready = False
 
 
 def parse_bot_response(text: str) -> dict:
@@ -100,9 +103,9 @@ async def send_and_wait(username: str) -> dict:
 
 @app.route("/check")
 def check():
-    global tg_loop
-    if tg_loop is None:
-        return jsonify({"success": False, "error": "Telegram loop not ready yet."}), 500
+    global tg_ready
+    if not tg_ready:
+        return jsonify({"success": False, "error": "Telegram loop not ready yet."})
 
     username = request.args.get("username")
     if not username:
@@ -116,24 +119,17 @@ def check():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@app.route("/")
-def home():
-    return jsonify({"status": "ok", "message": "API running fine 🚀"})
-
-
 def run_flask():
     port = int(os.getenv("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
 
 async def start_all():
-    global tg_loop
-    tg_loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(tg_loop)
-
+    global tg_loop, tg_ready
+    tg_loop = asyncio.get_event_loop()
     await tg_client.start()
+    tg_ready = True
     print("✅ Telegram client started successfully")
-
     Thread(target=run_flask, daemon=True).start()
     await asyncio.Event().wait()
 
