@@ -2,6 +2,14 @@ services:
   - type: web
     name: telechecker
     env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn app.py"
-    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: API_ID
+        value: 29969433
+      - key: API_HASH
+        value: 884f9ffa4e8ece099cccccade82effac
+      - key: PHONE_NUMBER
+        value: +919214045762
+      - key: TARGET_BOT
+        value: "@telebrecheddb_bot"
