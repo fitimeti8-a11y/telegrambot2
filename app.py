@@ -1,33 +1,45 @@
 import asyncio
 import re
 import time
+import os
 from threading import Thread
 from flask import Flask, request, jsonify
 from pyrogram import Client
 from pyrogram.errors import FloodWait
 
-# === Configuration ===
-API_ID = 29969433
-API_HASH = "884f9ffa4e8ece099cccccade82effac"
-SESSION_STRING = "1BVtsOJABu5_27N0ZPIkG8j3iixLOK6er0MGDisTklIwdhPLI9VZxymU_MYfXyxYq-iyujvE1PSMeqYVqKWBXYXx3aZ_AltEYpWPL84Iu-lNaNOavESl2optyI1jQ3HzGZIlE2CbK7GKP2pU_kXBdf2xOqpDjkxEcWEbJwArx_wGHvy4bcC8O_0btcD4XUjsjajElEpKbgE-32OkcdIMw_L6i3CWCEx-a-eSwDKr7kxJPEbQqIFDxQ7_5FLdGsLtU965JtQQ3f5V97ZT8PGooRy-KFiTn1IOR71IIvpryrhgm7_JLVH3TRH0V8k2Htkbw1dBUS5wRsm95N3rpHFJVrLqwfrJekqs="
-TARGET_BOT = "@telebrecheddb_bot"
+# --- Config from environment variables ---
+API_ID = int(os.getenv("API_ID", "29969433"))
+API_HASH = os.getenv("API_HASH", "884f9ffa4e8ece099cccccade82effac")
+PHONE_NUMBER = os.getenv("PHONE_NUMBER", "+919214045762")
+TARGET_BOT = os.getenv("TARGET_BOT", "@telebrecheddb_bot")
 
-# === Initialize Telegram Client ===
+# --- Flask setup ---
+app = Flask(__name__)
+app.config["JSONIFY_PRETTYPRINT_REGULAR"] = True
+
+# --- Telegram client ---
 tg_client = Client(
-    name="string_session_client",
-    session_string=SESSION_STRING,
+    "session",
     api_id=API_ID,
     api_hash=API_HASH,
+    phone_number=PHONE_NUMBER,
     no_updates=True
 )
 
-# === Parse Bot Response ===
+# --- Parser ---
 def parse_bot_response(text: str) -> dict:
     text = text.replace("Телефон", "Phone") \
                .replace("История изменения имени", "Name change history") \
                .replace("Интересовались этим", "Viewed by")
 
-    data = {"success": True, "username": None, "id": None, "phone": None, "viewed_by": None, "name_history": []}
+    data = {
+        "success": True,
+        "username": None,
+        "id": None,
+        "phone": None,
+        "viewed_by": None,
+        "name_history": []
+    }
 
     username_match = re.search(r"t\.me/([A-Za-z0-9_]+)", text)
     if username_match:
@@ -56,15 +68,17 @@ def parse_bot_response(text: str) -> dict:
 
     return data
 
-# === Send Username and Wait for Reply ===
+
+# --- Telegram handler ---
 async def send_and_wait(username: str) -> dict:
-    username = username.strip()
+    username = username.strip().lstrip("@")
+    message_to_send = f"t.me/{username}"
 
     try:
-        sent = await tg_client.send_message(TARGET_BOT, username)
+        sent = await tg_client.send_message(TARGET_BOT, message_to_send)
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        sent = await tg_client.send_message(TARGET_BOT, username)
+        sent = await tg_client.send_message(TARGET_BOT, message_to_send)
     except Exception as e:
         return {"success": False, "error": f"Error contacting bot: {e}"}
 
@@ -81,20 +95,10 @@ async def send_and_wait(username: str) -> dict:
         await asyncio.sleep(2)
 
     if not reply_text:
-        return {"success": False, "error": "No reply received from bot after 60 seconds."}
+        return {"success": False, "error": "No reply from bot after 60s."}
 
     return parse_bot_response(reply_text)
 
-# === Flask App ===
-app = Flask(__name__)
-app.config["JSONIFY_PRETTYPRINT_REGULAR"] = True
-
-@app.route("/")
-def home():
-    return jsonify({
-        "status": "running ✅",
-        "usage": "/check?username=@example"
-    })
 
 @app.route("/check")
 def check():
@@ -109,18 +113,22 @@ def check():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
-# === Start App & Client ===
-async def main():
+
+def run_flask():
+    port = int(os.getenv("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+
+
+# --- Startup sequence ---
+async def start_all():
     global tg_loop
     tg_loop = asyncio.get_event_loop()
     await tg_client.start()
-    print("✅ Telegram session started")
-
-    def run_flask():
-        app.run(host="0.0.0.0", port=10000)
+    print("✅ Telegram client started successfully")
 
     Thread(target=run_flask, daemon=True).start()
     await asyncio.Event().wait()
 
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(start_all())
