@@ -7,15 +7,12 @@ from flask import Flask, request, jsonify
 from pyrogram import Client
 from pyrogram.errors import FloodWait
 
-# --- Config from environment variables ---
 API_ID = int(os.getenv("API_ID", "29969433"))
 API_HASH = os.getenv("API_HASH", "884f9ffa4e8ece099cccccade82effac")
 PHONE_NUMBER = os.getenv("PHONE_NUMBER", "+919214045762")
 TARGET_BOT = os.getenv("TARGET_BOT", "@telebrecheddb_bot")
 
-# --- Flask setup ---
 app = Flask(__name__)
-app.config["JSONIFY_PRETTYPRINT_REGULAR"] = True
 
 # --- Telegram client ---
 tg_client = Client(
@@ -26,7 +23,9 @@ tg_client = Client(
     no_updates=True
 )
 
-# --- Parser ---
+tg_loop = None  # Global loop
+
+
 def parse_bot_response(text: str) -> dict:
     text = text.replace("Телефон", "Phone") \
                .replace("История изменения имени", "Name change history") \
@@ -69,7 +68,6 @@ def parse_bot_response(text: str) -> dict:
     return data
 
 
-# --- Telegram handler ---
 async def send_and_wait(username: str) -> dict:
     username = username.strip().lstrip("@")
     message_to_send = f"t.me/{username}"
@@ -102,6 +100,10 @@ async def send_and_wait(username: str) -> dict:
 
 @app.route("/check")
 def check():
+    global tg_loop
+    if tg_loop is None:
+        return jsonify({"success": False, "error": "Telegram loop not ready yet."}), 500
+
     username = request.args.get("username")
     if not username:
         return jsonify({"success": False, "error": "Missing 'username' parameter"}), 400
@@ -114,15 +116,21 @@ def check():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@app.route("/")
+def home():
+    return jsonify({"status": "ok", "message": "API running fine 🚀"})
+
+
 def run_flask():
     port = int(os.getenv("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
 
-# --- Startup sequence ---
 async def start_all():
     global tg_loop
-    tg_loop = asyncio.get_event_loop()
+    tg_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(tg_loop)
+
     await tg_client.start()
     print("✅ Telegram client started successfully")
 
