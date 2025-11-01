@@ -25,7 +25,7 @@ tg_client = Client(
     no_updates=True
 )
 
-tg_loop = None
+tg_loop = asyncio.new_event_loop()
 tg_ready = False
 
 
@@ -119,20 +119,30 @@ def check():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@app.route("/")
+def home():
+    return jsonify({"status": "running", "telegram_ready": tg_ready})
+
+
 def run_flask():
     port = int(os.getenv("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
 
-async def start_all():
-    global tg_loop, tg_ready
-    tg_loop = asyncio.get_event_loop()
+async def start_tg():
+    global tg_ready
     await tg_client.start()
     tg_ready = True
     print("✅ Telegram client started successfully")
+
+
+def main():
+    global tg_loop
+    tg_loop.create_task(start_tg())
     Thread(target=run_flask, daemon=True).start()
-    await asyncio.Event().wait()
+    tg_loop.run_forever()
 
 
 if __name__ == "__main__":
-    asyncio.run(start_all())
+    asyncio.set_event_loop(tg_loop)
+    main()
